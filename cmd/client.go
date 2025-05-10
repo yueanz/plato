@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
-	"github.com/yueanz/plato/cmd/client"
+	"github.com/yueanz/plato/client"
 )
 
 func init() {
