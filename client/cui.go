@@ -12,9 +12,13 @@ import (
 
 var (
 	buf  string
-	chat string
+	chat *sdk.Chat
 	pos  int
 )
+
+type VOT struct {
+	Name, Msg, Sep string
+}
 
 func setHeadText(g *gocui.Gui, msg string) {
 	v, err := g.View("head")
@@ -82,7 +86,7 @@ func layout(g *gocui.Gui) error {
 }
 
 func quit(g *gocui.Gui, v *gocui.View) error {
-	//chat.Close()
+	chat.Close()
 	ov, _ := g.View("out")
 	buf = ov.Buffer()
 	g.Close()
@@ -90,7 +94,7 @@ func quit(g *gocui.Gui, v *gocui.View) error {
 }
 
 func viewUpdate(g *gocui.Gui, cv *gocui.View) error {
-	//doSay(g, cv)
+	doSay(g, cv)
 	l := len(cv.Buffer())
 	cv.MoveCursor(0-l, 0, true)
 	cv.Clear()
@@ -154,8 +158,60 @@ func pasteUp(g *gocui.Gui, cv *gocui.View) error {
 	return nil
 }
 
-func doSay()  {}
-func doRecv() {}
+func (self VOT) Show(g *gocui.Gui) error {
+	v, err := g.View("out")
+	if err != nil {
+		//log.Println("No output view")
+		return nil
+	}
+	fmt.Fprintf(v, "%v:%v%v\n", color.FgGreen.Text(self.Name), self.Sep,
+		color.FgYellow.Text(self.Msg))
+	return nil
+}
+func viewPrint(g *gocui.Gui, name, msg string, newline bool) {
+	var out VOT
+	out.Name = name
+	out.Msg = msg
+	if newline {
+		out.Sep = "\n"
+	} else {
+		out.Sep = " "
+	}
+	g.Update(out.Show)
+}
+
+func doSay(g *gocui.Gui, cv *gocui.View) {
+	v, err := g.View("out")
+	if cv != nil && err == nil {
+		p := cv.ReadEditor()
+		if p != nil {
+			msg := &sdk.Message{
+				Type:       sdk.MsgTypeText,
+				Name:       "logic",
+				FromUserID: "123213",
+				ToUserID:   "222222",
+				Content:    string(p)}
+			//先把自己说的话显示到消息流中
+			// viewPrint(g, "me:", msg.Content, false)
+			chat.Send(msg)
+		}
+		v.Autoscroll = true
+	}
+}
+
+func doRecv(g *gocui.Gui) {
+	recvChannel := chat.Recv()
+	for msg := range recvChannel {
+		if msg != nil {
+			switch msg.Type {
+			case sdk.MsgTypeText:
+				viewPrint(g, msg.Name, msg.Content, false)
+				//case sdk.MsgTypeAck:
+				//TODO 默认不处理
+			}
+		}
+	}
+}
 
 func RunMain() {
 	fmt.Println("client cui")
@@ -190,10 +246,10 @@ func RunMain() {
 		log.Panicln(err)
 	}
 
-	//go doRecv(g)
-	// if err := g.MainLoop(); err != nil {
-	// 	log.Panicln(err)
-	// }
+	go doRecv(g)
+	if err := g.MainLoop(); err != nil {
+		log.Panicln(err)
+	}
 
 	err = os.WriteFile("chat.log", []byte(buf), 0644)
 	if err != nil {
